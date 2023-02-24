@@ -33,7 +33,7 @@ async fn main() {
                     result = rx.recv() => {
                         let (msg, other_addr) = result.unwrap();
                         if addr != other_addr {
-                            writer.write_all(format!("lmsg> {}", msg).as_bytes()).await.unwrap();
+                            writer.write_all(format!("new message => {}", msg).as_bytes()).await.unwrap();
                         }
                     }
                 }
@@ -41,3 +41,4 @@ async fn main() {
         });
     }
 }
+

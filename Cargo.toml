@@ -1,5 +1,8 @@
+[[bin]]
+name = "lmsg-server"
+path = "src/server/main.rs"
 [package]
-name = "lmsg"
+name = "lmsg-server"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,3 +10,9 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.25.0", features = ["full"] }
+
+[[bin]]
+name = "lmsg-client"
+path = "src/client/main.rs"
+version = "0.1.0"
+edition = "2021"
