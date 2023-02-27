@@ -1,10 +1,7 @@
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::sync::broadcast;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-};
+use tokio::{io::AsyncWriteExt, net::TcpListener};
 
 const CHAT_SERVER: &str = "127.0.0.1:7878";
 
@@ -40,7 +37,8 @@ async fn main() {
                     result = rx.recv() => {
                         let (msg, other_addr) = result.unwrap();
                         if addr != other_addr {
-                            writer.write_all(format!("new message => {}", msg).as_bytes()).await.unwrap();
+                            writer.write_all(format!("{} => {}", other_addr, msg).as_bytes()).await.unwrap();
+                            println!("{} => {}", other_addr, msg)
                         }
                     }
                 }
