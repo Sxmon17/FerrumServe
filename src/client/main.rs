@@ -1,28 +1,15 @@
-use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
 
-const CHAT_SERVER: &str = "localhost:7878";
+use std::error::Error;
 
 #[tokio::main]
-async fn main() {
-    //connect to the server with tokio
-    let mut stream = tokio::net::TcpStream::connect(CHAT_SERVER).await.unwrap();
+pub async fn main() -> Result<(), Box<dyn Error>> {
+    let mut stream = TcpStream::connect("127.0.0.1:7878").await?;
+    println!("created stream");
 
-    //create a channel to send messages to the server
-    let (mut tx, mut rx) = tokio::io::split(stream);
+    let result = stream.write_all(b"hello world\n").await;
+    println!("wrote to stream; success={:?}", result.is_ok());
 
-    //create a channel to receive messages from the server
-    let (mut tx2, mut rx2) = tokio::sync::mpsc::channel(32);
-
-    //spawn a task to read messages from the server
-    tokio::spawn(async move {
-        loop {
-            let mut buf = vec![0; 1024];
-            let n = rx.read(&mut buf).await.unwrap();
-            if n == 0 {
-                break;
-            }
-            let msg = String::from_utf8_lossy(&buf[..n]);
-            println!("server => {}", msg);
-        }
-    });
+    Ok(())
 }

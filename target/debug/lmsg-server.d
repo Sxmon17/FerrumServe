@@ -1,1 +1,1 @@
-/home/simon/IdeaProjects/lmsg/target/debug/lmsg-server: /home/simon/IdeaProjects/lmsg/src/server/main.rs
+/home/simon/IdeaProjects/lan-msg/target/debug/lmsg-server: /home/simon/IdeaProjects/lan-msg/src/server/main.rs
