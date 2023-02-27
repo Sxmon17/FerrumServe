@@ -6,12 +6,19 @@ use tokio::{
     net::TcpListener,
 };
 
+const CHAT_SERVER: &str = "127.0.0.1:7878";
+
 #[tokio::main]
 async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").await.unwrap();
+    let listener = TcpListener::bind(CHAT_SERVER).await.unwrap();
+    println!("Listening on: {} ...", CHAT_SERVER);
+
     let (tx, _rx) = broadcast::channel(10);
+    println!("Broadcast channel created");
+
     loop {
         let (mut socket, addr) = listener.accept().await.unwrap();
+        println!("New client: {}", addr);
 
         let tx = tx.clone();
         let mut rx = tx.subscribe();
