@@ -10,6 +10,7 @@ tracing-subscriber = { version = "0.3.16", default-features = false, features = 
 futures = { version = "0.3.26", features = ["thread-pool"]}
 tokio-util = { version = "0.7.7", features = ["full"] }
 tokio-stream = { version = "0.1.12" }
+colored = "2.0.0"
 
 [[bin]]
 name = "lmsg-client"
