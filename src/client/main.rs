@@ -1,33 +1,57 @@
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-};
+use futures::StreamExt;
+use tokio::io;
+use tokio_util::codec::{BytesCodec, FramedRead, FramedWrite};
 
+use std::env;
 use std::error::Error;
-
-const CHAT_SERVER: &str = "127.0.0.1:7878";
+use std::net::SocketAddr;
 
 #[tokio::main]
-pub async fn main() -> Result<(), Box<dyn Error>> {
-    let mut stream = TcpStream::connect("127.0.0.1:7878").await?;
-    println!("Connected to the server: {}", CHAT_SERVER);
+async fn main() -> Result<(), Box<dyn Error>> {
+    let args = env::args().skip(1).collect::<Vec<_>>();
 
-    loop {
-        let (mut reader, mut writer) = stream.split();
-        let input = String::new();
-        let mut data = vec![0; 1024];
+    let addr = args
+        .first()
+        .ok_or("this program requires at least one argument")?;
+    let addr = addr.parse::<SocketAddr>()?;
 
-        tokio::select! {
-            result = reader.read(&mut data) => {
-                if result.unwrap() == 0 {
-                    break;
+    let stdin = FramedRead::new(io::stdin(), BytesCodec::new());
+    let stdin = stdin.map(|i| i.map(|bytes| bytes.freeze()));
+    let stdout = FramedWrite::new(io::stdout(), BytesCodec::new());
+
+    tcp::connect(&addr, stdin, stdout).await?;
+
+    Ok(())
+}
+
+mod tcp {
+    use bytes::Bytes;
+    use futures::{future, Sink, SinkExt, Stream, StreamExt};
+    use std::{error::Error, io, net::SocketAddr};
+    use tokio::net::TcpStream;
+    use tokio_util::codec::{BytesCodec, FramedRead, FramedWrite};
+
+    pub async fn connect(
+        addr: &SocketAddr,
+        mut stdin: impl Stream<Item = Result<Bytes, io::Error>> + Unpin,
+        mut stdout: impl Sink<Bytes, Error = io::Error> + Unpin,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut stream = TcpStream::connect(addr).await?;
+        let (r, w) = stream.split();
+        let mut sink = FramedWrite::new(w, BytesCodec::new());
+        let mut stream = FramedRead::new(r, BytesCodec::new())
+            .filter_map(|i| match i {
+                Ok(i) => future::ready(Some(i.freeze())),
+                Err(e) => {
+                    println!("failed to read from socket; error={}", e);
+                    future::ready(None)
                 }
-                println!("{}", String::from_utf8_lossy(&data));
-            }
-            result = writer.write(input.as_bytes()) => {
-                result.unwrap();
-            }
+            })
+            .map(Ok);
+
+        match future::join(sink.send_all(&mut stdin), stdout.send_all(&mut stream)).await {
+            (Err(e), _) | (_, Err(e)) => Err(e.into()),
+            _ => Ok(()),
         }
     }
-    Ok(())
 }
