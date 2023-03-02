@@ -100,6 +100,10 @@ async fn process(
         }
     };
 
+    lines
+        .send("\nWelcome to the chat!\n".green().to_string())
+        .await?;
+
     let mut peer = Peer::new(state.clone(), lines).await?;
 
     {
