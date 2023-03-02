@@ -1,5 +1,5 @@
 [package]
-name = "lan-msg"
+name = "rum"
 version = "0.1.0"
 edition = "2021"
 
@@ -13,10 +13,10 @@ tokio-stream = { version = "0.1.12" }
 colored = "2.0.0"
 
 [[bin]]
-name = "lmsg-client"
+name = "rum-client"
 path = "src/client/main.rs"
 edition = "2021"
 
 [[bin]]
-name = "lmsg-server"
+name = "rum-server"
 path = "src/server/main.rs"
