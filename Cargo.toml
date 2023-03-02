@@ -1,18 +1,21 @@
-[[bin]]
-name = "lmsg-server"
-path = "src/server/main.rs"
 [package]
-name = "lmsg-server"
+name = "lan-msg"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-tokio = { version = "1.25.0", features = ["full"] }
+tokio = { version = "1.26.0", features = ["full"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", default-features = false, features = ["fmt", "ansi", "env-filter", "tracing-log"] }
+futures = { version = "0.3.26", features = ["thread-pool"]}
+tokio-util = { version = "0.7.7", features = ["full"] }
+tokio-stream = { version = "0.1.12" }
 
 [[bin]]
 name = "lmsg-client"
 path = "src/client/main.rs"
-version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "lmsg-server"
+path = "src/server/main.rs"
