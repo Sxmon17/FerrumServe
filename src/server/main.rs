@@ -45,7 +45,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 type Tx = mpsc::UnboundedSender<String>;
-
 type Rx = mpsc::UnboundedReceiver<String>;
 
 struct Shared {
@@ -91,7 +90,9 @@ async fn process(
     addr: SocketAddr,
 ) -> Result<(), Box<dyn Error>> {
     let mut lines = Framed::new(stream, LinesCodec::new());
-    lines.send("Please enter your username:").await?;
+    lines
+        .send("Please enter your username:".blue().to_string())
+        .await?;
     let username = match lines.next().await {
         Some(Ok(line)) => line,
         _ => {
@@ -101,7 +102,7 @@ async fn process(
     };
 
     lines
-        .send("\nWelcome to the chat!\n".green().to_string())
+        .send("\nWelcome to the chat!".green().to_string())
         .await?;
 
     let mut peer = Peer::new(state.clone(), lines).await?;

@@ -1,6 +1,6 @@
 [package]
 name = "rum"
-version = "0.1.0"
+version = "0.1.5-alpha"
 edition = "2021"
 
 [dependencies]
