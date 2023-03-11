@@ -12,6 +12,7 @@ tokio-util = { version = "0.7.7", features = ["full"] }
 tokio-stream = { version = "0.1.12" }
 colored = "2.0.0"
 bytes = "1.4.0"
+texel_types = "2.0.2"
 
 [[bin]]
 name = "rum-client"

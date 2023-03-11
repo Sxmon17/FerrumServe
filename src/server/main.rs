@@ -29,6 +29,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let listener = TcpListener::bind(&addr).await?;
 
+    // print a ascii logo
+    let ascii = r"
+
+_______  __ __   _____             ______  ____  _______ ___  __  ____  _______
+\_  __ \|  |  \ /     \   ______  /  ___/_/ __ \ \_  __ \\  \/ /_/ __ \ \_  __ \
+ |  | \/|  |  /|  Y Y  \ /_____/  \___ \ \  ___/  |  | \/ \   / \  ___/  |  | \/
+ |__|   |____/ |__|_|  /         /____  > \___  > |__|     \_/   \___  > |__|
+                     \/               \/      \/                     \/
+
+    ".to_string().bright_purple().bold();
+
+    println!("{}", ascii);
     tracing::info!("server running on {}", addr);
 
     loop {
