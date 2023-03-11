@@ -21,3 +21,8 @@ edition = "2021"
 [[bin]]
 name = "rum-server"
 path = "src/server/main.rs"
+
+[[bin]]
+name = "shell"
+path = "src/shell/main.rs"
+
