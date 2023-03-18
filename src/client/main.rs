@@ -30,7 +30,6 @@ mod tcp {
     use std::{error::Error, io, net::SocketAddr};
     use tokio::net::TcpStream;
     use tokio_util::codec::{BytesCodec, FramedRead, FramedWrite};
-
     pub async fn connect(
         addr: &SocketAddr,
         mut stdin: impl Stream<Item = Result<Bytes, io::Error>> + Unpin,

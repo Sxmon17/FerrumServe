@@ -11,6 +11,7 @@ use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use surrealdb::{Datastore, Session};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -39,8 +40,11 @@ _______  __ __   _____             ______  ____  _______ ___  __  ____  _______
                      \/               \/      \/                     \/
 
     ".to_string().bright_purple().bold();
-
     println!("{}", ascii);
+
+
+    tracing::info!("database created");
+
     tracing::info!("server running on {}", addr);
 
     loop {
@@ -101,6 +105,9 @@ async fn process(
     stream: TcpStream,
     addr: SocketAddr,
 ) -> Result<(), Box<dyn Error>> {
+    let ds = Datastore::new("memory").await?;
+    let ses = Session::for_db("my_ns", "my_db");
+
     let mut lines = Framed::new(stream, LinesCodec::new());
     lines
         .send("Please enter your username:".blue().to_string())
@@ -112,6 +119,14 @@ async fn process(
             return Ok(());
         }
     };
+
+    let sql = format!("CREATE user:1 SET name='{}'", username);
+    let entry = ds.execute(&sql, &ses, None, false).await?;
+
+    println!("entry: {:?}", entry);
+
+    let all_users = ds.execute("SELECT * FROM user", &ses, None, false).await?;
+    println!("all_users: {:?}", all_users);
 
     lines
         .send("\nWelcome to the chat!".green().to_string())
