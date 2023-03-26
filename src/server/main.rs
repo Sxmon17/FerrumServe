@@ -5,13 +5,13 @@ use tokio_util::codec::{Framed, LinesCodec};
 
 use colored::*;
 use futures::SinkExt;
+use rusqlite::{Connection, Result as SqlResult};
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use surrealdb::{Datastore, Session};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -21,8 +21,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_max_level(tracing::Level::DEBUG)
         .with_span_events(FmtSpan::FULL)
         .init();
-
-    let state = Arc::new(Mutex::new(Shared::new()));
 
     let addr = env::args()
         .nth(1)
@@ -39,21 +37,26 @@ _______  __ __   _____             ______  ____  _______ ___  __  ____  _______
  |__|   |____/ |__|_|  /         /____  > \___  > |__|     \_/   \___  > |__|
                      \/               \/      \/                     \/
 
-    ".to_string().bright_purple().bold();
+    "
+    .to_string()
+    .bright_purple()
+    .bold();
     println!("{}", ascii);
-
-
-    tracing::info!("database created");
 
     tracing::info!("server running on {}", addr);
 
+    let conn = Arc::new(Mutex::new(init_user_database()?));
+    let state = Arc::new(Mutex::new(Shared::new()));
+
     loop {
         let (stream, addr) = listener.accept().await?;
-        let state = Arc::clone(&state);
+        let state_clone = state.clone();
+        let conn_clone = conn.clone();
 
         tokio::spawn(async move {
             tracing::debug!("accepted connection");
-            if let Err(e) = process(state, stream, addr).await {
+
+            if let Err(e) = process(state_clone, conn_clone, stream, addr).await {
                 tracing::error!("an error occurred; error = {:?}", e);
             }
         });
@@ -63,6 +66,7 @@ _______  __ __   _____             ______  ____  _______ ___  __  ____  _______
 type Tx = mpsc::UnboundedSender<String>;
 type Rx = mpsc::UnboundedReceiver<String>;
 
+#[derive(Debug, Clone)]
 struct Shared {
     peers: HashMap<SocketAddr, Tx>,
 }
@@ -100,33 +104,117 @@ impl Peer {
     }
 }
 
+fn init_user_database() -> SqlResult<Connection> {
+    let conn = Connection::open("user_database.sqlite3")?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        )",
+        [],
+    )?;
+    Ok(conn)
+}
+
+async fn register_user(
+    conn: &Arc<Mutex<Connection>>,
+    username: &str,
+    password: &str,
+) -> SqlResult<()> {
+    conn.lock().await.execute(
+        "INSERT INTO users (username, password) VALUES (?1, ?2)",
+        [username, password],
+    )?;
+    Ok(())
+}
+
+async fn authenticate_user(
+    conn: &Arc<Mutex<Connection>>,
+    username: &str,
+    password: &str,
+) -> SqlResult<bool> {
+    let query = "SELECT password FROM users WHERE username = ?1";
+    let conn_lock = conn.lock().await;
+    let mut stmt = conn_lock.prepare(query)?;
+    let mut rows = stmt.query([username])?;
+
+    if let Some(row) = rows.next()? {
+        let stored_password: String = row.get(0)?;
+        Ok(stored_password == password)
+    } else {
+        Ok(false)
+    }
+}
+
 async fn process(
     state: Arc<Mutex<Shared>>,
+    conn: Arc<Mutex<Connection>>,
     stream: TcpStream,
     addr: SocketAddr,
 ) -> Result<(), Box<dyn Error>> {
-    let ds = Datastore::new("memory").await?;
-    let ses = Session::for_db("my_ns", "my_db");
-
     let mut lines = Framed::new(stream, LinesCodec::new());
+
     lines
-        .send("Please enter your username:".blue().to_string())
+        .send(
+            "Please enter 'register' or 'login': \nregister username password:"
+                .blue()
+                .to_string(),
+        )
         .await?;
-    let username = match lines.next().await {
+
+    let login = match lines.next().await {
         Some(Ok(line)) => line,
         _ => {
-            tracing::error!("Failed to get username from {}. Client disconnected.", addr);
+            tracing::error!(
+                "Failed to get login information from {}. Client disconnected.",
+                addr
+            );
             return Ok(());
         }
     };
+    let login_parts = login.split(' ').collect::<Vec<&str>>();
 
-    let sql = format!("CREATE user:1 SET name='{}'", username);
-    let entry = ds.execute(&sql, &ses, None, false).await?;
+    if login_parts.len() < 3 {
+        lines
+            .send("Invalid input format Please enter 'register' or 'login': \nregister username password:".red().to_string())
+            .await?;
+        return Ok(());
+    }
 
-    println!("entry: {:?}", entry);
+    let register_or_login = login_parts[0];
+    let username = login_parts[1];
+    let password = login_parts[2];
 
-    let all_users = ds.execute("SELECT * FROM user", &ses, None, false).await?;
-    println!("all_users: {:?}", all_users);
+    if register_or_login == "register" {
+        match register_user(&conn, username, password).await {
+            Ok(_) => {
+                lines
+                    .send(format!(
+                        "Registration successful, welcome {}!",
+                        username.green().bold()
+                    ))
+                    .await?;
+            }
+            Err(e) => {
+                lines.send(format!("Registration failed: {:?}", e)).await?;
+                return Ok(());
+            }
+        }
+    } else if register_or_login == "login" {
+        let authenticated = authenticate_user(&conn, username, password).await?;
+        if !authenticated {
+            lines
+                .send("Authentication failed, please try again.")
+                .await?;
+            return Ok(());
+        }
+    } else {
+        lines
+            .send("Invalid command, use 'register' or 'login' followed by username and password.")
+            .await?;
+        return Ok(());
+    }
 
     lines
         .send("\nWelcome to the chat!".green().to_string())
