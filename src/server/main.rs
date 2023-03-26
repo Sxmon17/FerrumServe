@@ -1,3 +1,5 @@
+mod commands;
+
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::StreamExt;
@@ -185,6 +187,25 @@ async fn process(
     let register_or_login = login_parts[0];
     let username = login_parts[1];
     let password = login_parts[2];
+    use rusqlite::{Connection, Result as SqlResult};
+    use tokio::sync::Mutex;
+
+    async fn list_users(conn: &Arc<Mutex<Connection>>) -> SqlResult<Vec<String>> {
+        let query = "SELECT username FROM users";
+        let conn_lock = conn.lock().await;
+        let mut stmt = conn_lock.prepare(query)?;
+        let rows = stmt.query_map([], |row| {
+            let username: String = row.get(0)?;
+            Ok(username)
+        })?;
+
+        let mut user_list = Vec::new();
+        for user in rows {
+            user_list.push(user?);
+        }
+
+        Ok(user_list)
+    };
 
     if register_or_login == "register" {
         match register_user(&conn, username, password).await {
@@ -235,25 +256,43 @@ async fn process(
 
     loop {
         tokio::select! {
-            Some(msg) = peer.rx.recv() => {
-                peer.lines.send(&msg).await?;
-            }
-            result = peer.lines.next() => match result {
-                Some(Ok(msg)) => {
-                    let mut state = state.lock().await;
-                    let msg = format!("{}: {}", username.green().bold(), msg);
-                    state.broadcast(addr, &msg).await;
+                    Some(msg) = peer.rx.recv() => {
+                        peer.lines.send(&msg).await?;
+                    }
+                    result = peer.lines.next() => match result {
+                        Some(Ok(msg)) => {
+                            let mut state = state.lock().await;
+                            match msg.trim() {
+                                "/listusers" => {
+                                    let user_list = match commands::list_users(&conn).await {
+                                        Ok(users) => users.join(", "),
+                                        Err(e) => {
+                                            tracing::error!("Error fetching user list: {:?}", e);
+                                            "Error fetching user list.".to_string()
+                                        }
+                                    };
+                                    if let Some(sender) = state.peers.get(&addr) {
+                                            sender.send(format!("List of users: {}", user_list)).unwrap_or_else(|_| {
+                                                tracing::error!("Failed to send user list to {}", addr);
+                                            });
+                                        }
+                                }
+                                _ => {
+                                    let msg = format!("{}: {}", username.green().bold(), msg);
+                                    state.broadcast(addr, &msg).await;
+                                }
+                            }
+                        }
+                        Some(Err(e)) => {
+                            tracing::error!(
+                                "an error occurred while processing messages for {}; error = {:?}",
+                                username,
+                                e
+                            );
+                        }
+                        None => break,
+                    },
                 }
-                Some(Err(e)) => {
-                    tracing::error!(
-                        "an error occurred while processing messages for {}; error = {:?}",
-                        username,
-                        e
-                    );
-                }
-                None => break,
-            },
-        }
     }
 
     {
