@@ -1,7 +1,7 @@
+use bcrypt::{hash, verify, DEFAULT_COST};
+use rusqlite::{params, Connection, Result as SqlResult};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use rusqlite::{Connection, params, Result as SqlResult};
-use bcrypt::{DEFAULT_COST, hash, verify};
 
 pub fn init_user_database() -> SqlResult<Connection> {
     let conn = Connection::open("user_database.sqlite3")?;
@@ -29,7 +29,11 @@ pub async fn register_user(
     Ok(())
 }
 
-pub async fn authenticate_user(conn: &Arc<Mutex<Connection>>, username: &str, password: &str) -> SqlResult<bool> {
+pub async fn authenticate_user(
+    conn: &Arc<Mutex<Connection>>,
+    username: &str,
+    password: &str,
+) -> SqlResult<bool> {
     let conn = conn.lock().await;
     let mut stmt = conn.prepare("SELECT password FROM users WHERE username = ?1")?;
     let stored_password: String = match stmt.query_row(params![username], |row| row.get(0)) {

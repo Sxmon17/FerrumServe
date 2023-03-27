@@ -8,14 +8,14 @@ use tokio_util::codec::{Framed, LinesCodec};
 
 use colored::*;
 use futures::SinkExt;
-use rusqlite::{Connection, Result as SqlResult};
+use prettytable::{row, Table};
+use rusqlite::Connection;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use prettytable::{row, Table};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -73,7 +73,7 @@ type Rx = mpsc::UnboundedReceiver<String>;
 #[derive(Debug, Clone)]
 struct Shared {
     peers: HashMap<SocketAddr, Tx>,
-    usernames: HashMap<String, SocketAddr>,
+    usernames: HashMap<SocketAddr, String>,
 }
 
 struct Peer {
@@ -98,7 +98,18 @@ impl Shared {
     }
 
     fn is_user_connected(&self, username: &str) -> bool {
-        self.usernames.keys().any(|u| u == username)
+        self.usernames.values().any(|u| u == username)
+    }
+
+    pub async fn get_addr_by_username(&self, username: &str) -> Option<String> {
+        for (addr, tx) in self.peers.iter() {
+            if let Some(user) = self.usernames.get(addr) {
+                if *user == username {
+                    return Some(addr.to_string());
+                }
+            }
+        }
+        None
     }
 }
 
@@ -111,7 +122,7 @@ impl Peer {
         let addr = lines.get_ref().peer_addr()?;
         let (tx, rx) = mpsc::unbounded_channel();
         state.lock().await.peers.insert(addr, tx);
-        state.lock().await.usernames.insert(username.clone(), addr);
+        state.lock().await.usernames.insert(addr, username.clone());
         Ok(Peer { lines, rx })
     }
 }
@@ -158,7 +169,7 @@ async fn process(
     if register_or_login == "register" {
         match database::register_user(&conn, username, password).await {
             Ok(_) => {
-                tracing::info!("Registered user {}", username);
+                tracing::info!("registered user {}", username);
                 lines
                     .send(format!(
                         "Registration successful, welcome {}!",
@@ -211,7 +222,7 @@ async fn process(
             result = peer.lines.next() => match result {
                 Some(Ok(msg)) => {
                     let mut state = state.lock().await;
-                    match msg.trim() {
+                    match msg.trim().split(' ').collect::<Vec<&str>>()[0] {
                         "/listusers" => {
                             let db_conn = conn.lock().await;
                             let users = commands::get_all_users(&db_conn).unwrap_or_default();
@@ -231,6 +242,29 @@ async fn process(
 
                             peer.lines.send(response).await?;
                             tracing::info!("{} requested a list of users", username);
+                        }
+                        "/whisper" => {
+                            let mut parts = msg.splitn(3, ' ');
+                            if let Some(_pm_cmd) = parts.next() {
+                                if let Some(target_username) = parts.next() {
+                                    if let Some(private_message) = parts.next() {
+                                        if let Some(target_addr_str) = state.get_addr_by_username(target_username).await {
+                                            if let Ok(target_addr) = target_addr_str.parse::<SocketAddr>() {
+                                                if let Some(target_tx) = state.peers.get(&target_addr) {
+                                                    let msg = format!("{}(whisper): {}", username.green().bold(), private_message);
+                                                    target_tx.send(msg);
+                                                }
+                                            }
+                                        } else {
+                                            peer.lines.send("User not found or not connected.").await?;
+                                        }
+                                    } else {
+                                        peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
+                                    }
+                                } else {
+                                    peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
+                                }
+                            }
                         }
                         _ => {
                             let msg = format!("{}: {}", username.green().bold(), msg);
@@ -253,7 +287,7 @@ async fn process(
     {
         let mut state = state.lock().await;
         state.peers.remove(&addr);
-        state.usernames.retain(|_, &mut v| v != addr);
+        state.usernames.remove(&addr);
 
         tracing::info!("{} has left the chat", username);
         state
