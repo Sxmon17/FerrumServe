@@ -1,9 +1,4 @@
-use crate::Shared;
-use colored::Colorize;
-use rusqlite::{Connection, Result as SqlResult};
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::sync::Arc;
+use rusqlite::Connection;
 
 pub fn get_all_users(conn: &Connection) -> Result<Vec<String>, rusqlite::Error> {
     let mut stmt = conn.prepare("SELECT username FROM users")?;

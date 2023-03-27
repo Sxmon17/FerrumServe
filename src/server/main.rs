@@ -1,4 +1,5 @@
 mod commands;
+mod database;
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
@@ -7,14 +8,13 @@ use tokio_util::codec::{Framed, LinesCodec};
 
 use colored::*;
 use futures::SinkExt;
-use rusqlite::{Connection, params, Result as SqlResult};
+use rusqlite::{Connection, Result as SqlResult};
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use bcrypt::{DEFAULT_COST, hash, verify};
 use prettytable::{row, Table};
 
 #[tokio::main]
@@ -49,7 +49,7 @@ _______  __ __   _____             ______  ____  _______ ___  __  ____  _______
 
     tracing::info!("server running on {}", addr);
 
-    let conn = Arc::new(Mutex::new(init_user_database()?));
+    let conn = Arc::new(Mutex::new(database::init_user_database()?));
     let state = Arc::new(Mutex::new(Shared::new()));
 
     loop {
@@ -116,43 +116,6 @@ impl Peer {
     }
 }
 
-fn init_user_database() -> SqlResult<Connection> {
-    let conn = Connection::open("user_database.sqlite3")?;
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
-        )",
-        [],
-    )?;
-    Ok(conn)
-}
-
-async fn register_user(
-    conn: &Arc<Mutex<Connection>>,
-    username: &str,
-    password: &str,
-) -> SqlResult<()> {
-    let hashed_password = hash(password, DEFAULT_COST).unwrap();
-    conn.lock().await.execute(
-        "INSERT INTO users (username, password) VALUES (?1, ?2)",
-        [username, &hashed_password],
-    )?;
-    Ok(())
-}
-
-async fn authenticate_user(conn: &Arc<Mutex<Connection>>, username: &str, password: &str) -> SqlResult<bool> {
-    let conn = conn.lock().await;
-    let mut stmt = conn.prepare("SELECT password FROM users WHERE username = ?1")?;
-    let stored_password: String = match stmt.query_row(params![username], |row| row.get(0)) {
-        Ok(password) => password,
-        Err(_) => return Ok(false),
-    };
-
-    let is_valid = verify(password, &stored_password).unwrap();
-    Ok(is_valid)
-}
 async fn process(
     state: Arc<Mutex<Shared>>,
     conn: Arc<Mutex<Connection>>,
@@ -193,8 +156,9 @@ async fn process(
     let password = login_parts[2];
 
     if register_or_login == "register" {
-        match register_user(&conn, username, password).await {
+        match database::register_user(&conn, username, password).await {
             Ok(_) => {
+                tracing::info!("Registered user {}", username);
                 lines
                     .send(format!(
                         "Registration successful, welcome {}!",
@@ -208,7 +172,7 @@ async fn process(
             }
         }
     } else if register_or_login == "login" {
-        let authenticated = authenticate_user(&conn, username, password).await?;
+        let authenticated = database::authenticate_user(&conn, username, password).await?;
         if !authenticated {
             lines
                 .send("Authentication failed, please try again.")
@@ -266,6 +230,7 @@ async fn process(
                             let response = String::from_utf8(response).unwrap();
 
                             peer.lines.send(response).await?;
+                            tracing::info!("{} requested a list of users", username);
                         }
                         _ => {
                             let msg = format!("{}: {}", username.green().bold(), msg);
