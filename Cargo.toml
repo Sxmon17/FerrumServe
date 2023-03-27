@@ -15,6 +15,7 @@ bytes = "1.4.0"
 bincode = "1.3.3"
 rusqlite = "0.29.0"
 prettytable-rs = "0.10.0"
+bcrypt = "0.14.0"
 
 [[bin]]
 name = "rum-client"

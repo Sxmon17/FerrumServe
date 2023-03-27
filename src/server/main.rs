@@ -7,13 +7,14 @@ use tokio_util::codec::{Framed, LinesCodec};
 
 use colored::*;
 use futures::SinkExt;
-use rusqlite::{Connection, Result as SqlResult};
+use rusqlite::{Connection, params, Result as SqlResult};
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use bcrypt::{DEFAULT_COST, hash, verify};
 use prettytable::{row, Table};
 
 #[tokio::main]
@@ -133,31 +134,25 @@ async fn register_user(
     username: &str,
     password: &str,
 ) -> SqlResult<()> {
+    let hashed_password = hash(password, DEFAULT_COST).unwrap();
     conn.lock().await.execute(
         "INSERT INTO users (username, password) VALUES (?1, ?2)",
-        [username, password],
+        [username, &hashed_password],
     )?;
     Ok(())
 }
 
-async fn authenticate_user(
-    conn: &Arc<Mutex<Connection>>,
-    username: &str,
-    password: &str,
-) -> SqlResult<bool> {
-    let query = "SELECT password FROM users WHERE username = ?1";
-    let conn_lock = conn.lock().await;
-    let mut stmt = conn_lock.prepare(query)?;
-    let mut rows = stmt.query([username])?;
+async fn authenticate_user(conn: &Arc<Mutex<Connection>>, username: &str, password: &str) -> SqlResult<bool> {
+    let conn = conn.lock().await;
+    let mut stmt = conn.prepare("SELECT password FROM users WHERE username = ?1")?;
+    let stored_password: String = match stmt.query_row(params![username], |row| row.get(0)) {
+        Ok(password) => password,
+        Err(_) => return Ok(false),
+    };
 
-    if let Some(row) = rows.next()? {
-        let stored_password: String = row.get(0)?;
-        Ok(stored_password == password)
-    } else {
-        Ok(false)
-    }
+    let is_valid = verify(password, &stored_password).unwrap();
+    Ok(is_valid)
 }
-
 async fn process(
     state: Arc<Mutex<Shared>>,
     conn: Arc<Mutex<Connection>>,
