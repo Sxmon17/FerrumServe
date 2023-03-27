@@ -1,20 +1,20 @@
+use crate::Shared;
+use colored::Colorize;
 use rusqlite::{Connection, Result as SqlResult};
+use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
-pub async fn list_users(conn: &Arc<Mutex<Connection>>) -> SqlResult<Vec<String>> {
-    let query = "SELECT username FROM users";
-    let conn_lock = conn.lock().await;
-    let mut stmt = conn_lock.prepare(query)?;
+pub fn get_all_users(conn: &Connection) -> Result<Vec<String>, rusqlite::Error> {
+    let mut stmt = conn.prepare("SELECT username FROM users")?;
     let rows = stmt.query_map([], |row| {
         let username: String = row.get(0)?;
         Ok(username)
     })?;
 
-    let mut user_list = Vec::new();
-    for user in rows {
-        user_list.push(user?);
+    let mut users = Vec::new();
+    for row in rows {
+        users.push(row?);
     }
-
-    Ok(user_list)
+    Ok(users)
 }
