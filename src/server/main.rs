@@ -1,5 +1,6 @@
 mod commands;
 mod database;
+mod websocket;
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
@@ -16,6 +17,7 @@ use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -51,6 +53,8 @@ _______  __ __   _____             ______  ____  _______ ___  __  ____  _______
 
     let conn = Arc::new(Mutex::new(database::init_user_database()?));
     let state = Arc::new(Mutex::new(Shared::new()));
+
+    let websocket_proxy_task = tokio::spawn(websocket::websocket_proxy());
 
     loop {
         let (stream, addr) = listener.accept().await?;
@@ -137,7 +141,7 @@ async fn process(
 
     lines
         .send(
-            "Please enter 'register' or 'login': \nregister username password:"
+            "Please enter 'register' or 'login': \n\rregister username password:"
                 .blue()
                 .to_string(),
         )
@@ -157,7 +161,7 @@ async fn process(
 
     if login_parts.len() < 3 {
         lines
-            .send("Invalid input format Please enter 'register' or 'login': \nregister username password:".red().to_string())
+            .send("Invalid input format Please enter 'register' or 'login': \n\rregister username password:".red().to_string())
             .await?;
         return Ok(());
     }
@@ -198,7 +202,7 @@ async fn process(
     }
 
     lines
-        .send("\nWelcome to the chat!".green().to_string())
+        .send("\n\rWelcome to the chat!".green().to_string())
         .await?;
 
     let mut peer = Peer::new(state.clone(), lines, username.to_string()).await?;
@@ -209,7 +213,7 @@ async fn process(
         state
             .broadcast(
                 addr,
-                format!("\n-> User joined: {0}\n", username.blue().bold(),).as_str(),
+                format!("\n\r-> User joined: {0}\n\r", username.blue().bold(),).as_str(),
             )
             .await;
     }
@@ -293,10 +297,12 @@ async fn process(
         state
             .broadcast(
                 addr,
-                format!("\n<- User left: {0}\n", username.red().bold()).as_str(),
+                format!("\n\r<- User left: {0}\n\r", username.red().bold()).as_str(),
             )
             .await;
     }
 
     Ok(())
 }
+
+
