@@ -17,6 +17,15 @@ A simple, asynchronous TCP-based chat server built using Rust, Tokio, and SQLite
 - SQLite 🗄️
 
 ## Getting Started 🚀
+
+### Starting the server ⏫
+
+To start the server download FerrumServe from the release page
+
+``` bash
+$ ~/ferrum-serve 127.0.0.1:6142
+```
+## Building 📦
 #### Clone the repository
 
 ``` bash
@@ -32,7 +41,7 @@ $ cd rust-tcp-chat-server
 $ cargo build --release
 ```
 
-Run the server
+#### Run the server
 
 By default, the server will listen on 127.0.0.1:6142. You can provide an optional IP address and port as a command-line argument.
 
@@ -41,19 +50,6 @@ By default, the server will listen on 127.0.0.1:6142. You can provide an optiona
 $ ./target/release/rust-tcp-chat-server [IP:PORT]
 ```
 
-## Usage 🎮
-
-To connect to the chat server, you can use any TCP client like netcat or telnet.
-
-``` bash
-
-$ nc 127.0.0.1 6142
-```
-
-After connecting, you will be prompted to either register a new user or log in with an existing user account. Once logged in, you can start sending messages to all connected users.
-Commands
-
-/listusers: List all registered users with their online/offline status 👥.
 ## 📝 License
 
 Copyright © 2023 [Simon Guglberger](https://github.com/sxmon17) and [Aleksa Nikolic](https://github.com/aaaleks07).</br>
