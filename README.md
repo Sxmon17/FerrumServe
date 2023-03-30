@@ -1,4 +1,4 @@
-# 📨 rumessenger 
+# 📨 FerrumServe
 ## Rust TCP Chat Server 🦀💬
 
 A simple, asynchronous TCP-based chat server built using Rust, Tokio, and SQLite for user account management.
