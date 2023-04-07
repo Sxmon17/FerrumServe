@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub fn init_user_database() -> SqlResult<Connection> {
-    let conn = Connection::open("user_database.sqlite3")?;
+    let conn = Connection::open("../user_database.sqlite3")?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
@@ -13,6 +13,7 @@ pub fn init_user_database() -> SqlResult<Connection> {
         )",
         [],
     )?;
+    tracing::info!("user database initialized");
     Ok(conn)
 }
 
@@ -26,6 +27,7 @@ pub async fn register_user(
         "INSERT INTO users (username, password) VALUES (?1, ?2)",
         [username, &hashed_password],
     )?;
+    tracing::info!("registered user {}", username);
     Ok(())
 }
 
@@ -42,5 +44,7 @@ pub async fn authenticate_user(
     };
 
     let is_valid = verify(password, &stored_password).unwrap();
+    tracing::info!("user {} authenticated: {}", username, is_valid);
+
     Ok(is_valid)
 }

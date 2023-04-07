@@ -2,11 +2,6 @@ mod commands;
 mod database;
 mod websocket;
 
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, Mutex};
-use tokio_stream::StreamExt;
-use tokio_util::codec::{Framed, LinesCodec};
-
 use colored::*;
 use futures::SinkExt;
 use prettytable::{row, Table};
@@ -17,12 +12,14 @@ use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{mpsc, Mutex};
+use tokio_stream::StreamExt;
+use tokio_util::codec::{Framed, LinesCodec};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    use tracing_subscriber::fmt::format::FmtSpan;
-
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .with_span_events(FmtSpan::FULL)
@@ -34,19 +31,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let listener = TcpListener::bind(&addr).await?;
 
-    // print a ascii logo
     let ascii = r"
-
-_______  __ __   _____             ______  ____  _______ ___  __  ____  _______
-\_  __ \|  |  \ /     \   ______  /  ___/_/ __ \ \_  __ \\  \/ /_/ __ \ \_  __ \
- |  | \/|  |  /|  Y Y  \ /_____/  \___ \ \  ___/  |  | \/ \   / \  ___/  |  | \/
- |__|   |____/ |__|_|  /         /____  > \___  > |__|     \_/   \___  > |__|
-                     \/               \/      \/                     \/
+  _____
+_/ ____\__________________ __ __  _____             ______ ______________  __ ____
+\   __\/ __ \_  __ \_  __ \  |  \/     \   ______  /  ___// __ \_  __ \  \/ // __ \
+ |  | \  ___/|  | \/|  | \/  |  /  Y Y  \ /_____/  \___ \\  ___/|  | \/\   /\  ___/
+ |__|  \___  >__|   |__|  |____/|__|_|  /         /____  >\___  >__|    \_/  \___  >
+           \/                         \/               \/     \/                 \/
 
     "
-    .to_string()
-    .bright_purple()
-    .bold();
+        .to_string()
+        .bright_purple()
+        .bold();
     println!("{}", ascii);
 
     tracing::info!("server running on {}", addr);
@@ -54,7 +50,7 @@ _______  __ __   _____             ______  ____  _______ ___  __  ____  _______
     let conn = Arc::new(Mutex::new(database::init_user_database()?));
     let state = Arc::new(Mutex::new(Shared::new()));
 
-    let websocket_proxy_task = tokio::spawn(websocket::websocket_proxy());
+    tokio::spawn(websocket::websocket_proxy());
 
     loop {
         let (stream, addr) = listener.accept().await?;
@@ -106,7 +102,7 @@ impl Shared {
     }
 
     pub async fn get_addr_by_username(&self, username: &str) -> Option<String> {
-        for (addr, tx) in self.peers.iter() {
+        for (addr, _) in self.peers.iter() {
             if let Some(user) = self.usernames.get(addr) {
                 if *user == username {
                     return Some(addr.to_string());
@@ -115,6 +111,7 @@ impl Shared {
         }
         None
     }
+
 }
 
 impl Peer {
@@ -151,9 +148,9 @@ async fn process(
         Some(Ok(line)) => line,
         _ => {
             tracing::error!(
-                "Failed to get login information from {}. Client disconnected.",
-                addr
-            );
+            "Failed to get login information from {}. Client disconnected.",
+            addr
+        );
             return Ok(());
         }
     };
@@ -161,7 +158,7 @@ async fn process(
 
     if login_parts.len() < 3 {
         lines
-            .send("Invalid input format Please enter 'register' or 'login': \n\rregister username password:".red().to_string())
+            .send("Invalid input format. Please enter 'register' or 'login': \n\rregister username password:".red().to_string())
             .await?;
         return Ok(());
     }
@@ -213,79 +210,79 @@ async fn process(
         state
             .broadcast(
                 addr,
-                format!("\n\r-> User joined: {0}\n\r", username.blue().bold(),).as_str(),
+                format!("\n\r-> User joined: {0}\n\r", username.blue().bold(), ).as_str(),
             )
             .await;
     }
 
     loop {
         tokio::select! {
-            Some(msg) = peer.rx.recv() => {
-                peer.lines.send(&msg).await?;
-            }
-            result = peer.lines.next() => match result {
-                Some(Ok(msg)) => {
-                    let mut state = state.lock().await;
-                    match msg.trim().split(' ').collect::<Vec<&str>>()[0] {
-                        "/listusers" => {
-                            let db_conn = conn.lock().await;
-                            let users = commands::get_all_users(&db_conn).unwrap_or_default();
+        Some(msg) = peer.rx.recv() => {
+            peer.lines.send(&msg).await?;
+        }
+        result = peer.lines.next() => match result {
+            Some(Ok(msg)) => {
+                let mut state = state.lock().await;
+                match msg.trim().split(' ').collect::<Vec<&str>>()[0] {
+                    "/listusers" => {
+                        let db_conn = conn.lock().await;
+                        let users = commands::get_all_users(&db_conn).unwrap_or_default();
 
-                            let mut table = Table::new();
-                            table.add_row(row!["Username", "Status"]);
+                        let mut table = Table::new();
+                        table.add_row(row!["Username", "Status"]);
 
-                            for user in users {
-                                let is_connected = state.is_user_connected(&user);
-                                let status = if is_connected { "Online".green() } else { "Offline".red() };
-                                table.add_row(row![user, status]);
-                            }
-
-                            let mut response = Vec::new();
-                            table.print(&mut response).unwrap();
-                            let response = String::from_utf8(response).unwrap();
-
-                            peer.lines.send(response).await?;
-                            tracing::info!("{} requested a list of users", username);
+                        for user in users {
+                            let is_connected = state.is_user_connected(&user);
+                            let status = if is_connected { "Online".green() } else { "Offline".red() };
+                            table.add_row(row![user, status]);
                         }
-                        "/whisper" => {
-                            let mut parts = msg.splitn(3, ' ');
-                            if let Some(_pm_cmd) = parts.next() {
-                                if let Some(target_username) = parts.next() {
-                                    if let Some(private_message) = parts.next() {
-                                        if let Some(target_addr_str) = state.get_addr_by_username(target_username).await {
-                                            if let Ok(target_addr) = target_addr_str.parse::<SocketAddr>() {
-                                                if let Some(target_tx) = state.peers.get(&target_addr) {
-                                                    let msg = format!("{}(whisper): {}", username.green().bold(), private_message);
-                                                    target_tx.send(msg);
-                                                }
+
+                        let mut response = Vec::new();
+                        table.print(&mut response).unwrap();
+                        let response = String::from_utf8(response).unwrap();
+
+                        peer.lines.send(response).await?;
+                        tracing::info!("{} requested a list of users", username);
+                    }
+                    "/whisper" => {
+                        let mut parts = msg.splitn(3, ' ');
+                        if let Some(_pm_cmd) = parts.next() {
+                            if let Some(target_username) = parts.next() {
+                                if let Some(private_message) = parts.next() {
+                                    if let Some(target_addr_str) = state.get_addr_by_username(target_username).await {
+                                        if let Ok(target_addr) = target_addr_str.parse::<SocketAddr>() {
+                                            if let Some(target_tx) = state.peers.get(&target_addr) {
+                                                let msg = format!("{}(whisper): {}", username.green().bold(), private_message);
+                                                target_tx.send(msg).unwrap();
                                             }
-                                        } else {
-                                            peer.lines.send("User not found or not connected.").await?;
                                         }
                                     } else {
-                                        peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
+                                        peer.lines.send("User not found or not connected.").await?;
                                     }
                                 } else {
                                     peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
                                 }
+                            } else {
+                                peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
                             }
                         }
-                        _ => {
-                            let msg = format!("{}: {}", username.green().bold(), msg);
-                            state.broadcast(addr, &msg).await;
-                        }
+                    }
+                    _ => {
+                        let msg = format!("{}: {}", username.green().bold(), msg);
+                        state.broadcast(addr, &msg).await;
                     }
                 }
-                Some(Err(e)) => {
-                    tracing::error!(
-                        "an error occurred while processing messages for {}; error = {:?}",
-                        username,
-                        e
-                    );
-                }
-                None => break,
-            },
-        }
+            }
+            Some(Err(e)) => {
+                tracing::error!(
+                    "an error occurred while processing messages for {}; error = {:?}",
+                    username,
+                    e
+                );
+            }
+            None => break,
+        },
+    }
     }
 
     {
@@ -304,5 +301,3 @@ async fn process(
 
     Ok(())
 }
-
-

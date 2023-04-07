@@ -1,5 +1,5 @@
 [package]
-name = "rum"
+name = "ferrum-serve"
 version = "0.9.1-beta"
 edition = "2021"
 
@@ -20,9 +20,5 @@ tungstenite = "0.18.0"
 tokio-tungstenite = "0.18.0"
 
 [[bin]]
-name = "rum-client"
-path = "src/client/main.rs"
-
-[[bin]]
-name = "rum-server"
-path = "src/server/main.rs"
+name = "ferrum-serve"
+path = "src/main.rs"

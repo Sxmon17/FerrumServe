@@ -4,9 +4,9 @@ use tokio::net::{TcpListener, TcpStream};
 use tungstenite::Message;
 use futures::TryStreamExt;
 use futures::StreamExt;
-use tokio_tungstenite::{accept_async, WebSocketStream};
+use tokio_tungstenite::accept_async;
 
-pub(crate) async fn websocket_proxy() {
+pub async fn websocket_proxy() {
     let ws_listener = TcpListener::bind("127.0.0.1:8081").await.unwrap();
     tracing::info!("websocket proxy listening on 127.0.0.1:8081");
 
