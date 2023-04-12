@@ -40,9 +40,9 @@ _/ ____\__________________ __ __  _____             ______ ______________  __ __
            \/                         \/               \/     \/                 \/
 
     "
-        .to_string()
-        .bright_purple()
-        .bold();
+    .to_string()
+    .bright_purple()
+    .bold();
     println!("{}", ascii);
 
     tracing::info!("server running on {}", addr);
@@ -111,7 +111,6 @@ impl Shared {
         }
         None
     }
-
 }
 
 impl Peer {
@@ -148,9 +147,9 @@ async fn process(
         Some(Ok(line)) => line,
         _ => {
             tracing::error!(
-            "Failed to get login information from {}. Client disconnected.",
-            addr
-        );
+                "Failed to get login information from {}. Client disconnected.",
+                addr
+            );
             return Ok(());
         }
     };
@@ -210,79 +209,90 @@ async fn process(
         state
             .broadcast(
                 addr,
-                format!("\n\r-> User joined: {0}\n\r", username.blue().bold(), ).as_str(),
+                format!("\n\r-> User joined: {0}\n\r", username.blue().bold(),).as_str(),
             )
             .await;
     }
 
     loop {
         tokio::select! {
-        Some(msg) = peer.rx.recv() => {
-            peer.lines.send(&msg).await?;
-        }
-        result = peer.lines.next() => match result {
-            Some(Ok(msg)) => {
-                let mut state = state.lock().await;
-                match msg.trim().split(' ').collect::<Vec<&str>>()[0] {
-                    "/listusers" => {
-                        let db_conn = conn.lock().await;
-                        let users = commands::get_all_users(&db_conn).unwrap_or_default();
+            Some(msg) = peer.rx.recv() => {
+                peer.lines.send(&msg).await?;
+            }
+            result = peer.lines.next() => match result {
+                Some(Ok(msg)) => {
+                    let mut state = state.lock().await;
+                    match msg.trim().split(' ').collect::<Vec<&str>>()[0] {
+                        "/listusers" => {
+                            let db_conn = conn.lock().await;
+                            let users = commands::get_all_users(&db_conn).unwrap_or_default();
 
-                        let mut table = Table::new();
-                        table.add_row(row!["Username", "Status"]);
+                            let mut table = Table::new();
+                            table.add_row(row!["Username", "Status"]);
 
-                        for user in users {
-                            let is_connected = state.is_user_connected(&user);
-                            let status = if is_connected { "Online".green() } else { "Offline".red() };
-                            table.add_row(row![user, status]);
+                            for user in users {
+                                let is_connected = state.is_user_connected(&user);
+                                let status = if is_connected { "Online".green() } else { "Offline".red() };
+                                table.add_row(row![user, status]);
+                            }
+
+                            let mut response = Vec::new();
+                            table.print(&mut response).unwrap();
+                            let response = String::from_utf8(response).unwrap();
+
+                            peer.lines.send(response).await?;
+                            tracing::info!("{} requested a list of users", username);
                         }
-
-                        let mut response = Vec::new();
-                        table.print(&mut response).unwrap();
-                        let response = String::from_utf8(response).unwrap();
-
-                        peer.lines.send(response).await?;
-                        tracing::info!("{} requested a list of users", username);
-                    }
-                    "/whisper" => {
-                        let mut parts = msg.splitn(3, ' ');
-                        if let Some(_pm_cmd) = parts.next() {
-                            if let Some(target_username) = parts.next() {
-                                if let Some(private_message) = parts.next() {
-                                    if let Some(target_addr_str) = state.get_addr_by_username(target_username).await {
-                                        if let Ok(target_addr) = target_addr_str.parse::<SocketAddr>() {
-                                            if let Some(target_tx) = state.peers.get(&target_addr) {
-                                                let msg = format!("{}(whisper): {}", username.green().bold(), private_message);
-                                                target_tx.send(msg).unwrap();
+                        "/whisper" => {
+                            let mut parts = msg.splitn(3, ' ');
+                            if let Some(_pm_cmd) = parts.next() {
+                                if let Some(target_username) = parts.next() {
+                                    if let Some(private_message) = parts.next() {
+                                        if let Some(target_addr_str) = state.get_addr_by_username(target_username).await {
+                                            if let Ok(target_addr) = target_addr_str.parse::<SocketAddr>() {
+                                                if let Some(target_tx) = state.peers.get(&target_addr) {
+                                                    let msg = format!("{}(whisper): {}", username.green().bold(), private_message);
+                                                    target_tx.send(msg).unwrap();
+                                                }
                                             }
+                                        } else {
+                                            peer.lines.send("User not found or not connected.").await?;
                                         }
                                     } else {
-                                        peer.lines.send("User not found or not connected.").await?;
+                                        peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
                                     }
                                 } else {
                                     peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
                                 }
-                            } else {
-                                peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
                             }
                         }
-                    }
-                    _ => {
-                        let msg = format!("{}: {}", username.green().bold(), msg);
-                        state.broadcast(addr, &msg).await;
+                        "/help" => {
+                            let mut response = Vec::new();
+                            let mut table = Table::new();
+                            table.add_row(row!["Command", "Description"]);
+                            table.add_row(row!["/listusers", "List all users"]);
+                            table.add_row(row!["/whisper <username> <message>", "Send a private message to a user"]);
+                            table.add_row(row!["/help", "Show this help message"]);
+                            table.print(&mut response).unwrap();
+                            let response = String::from_utf8(response).unwrap();
+                            peer.lines.send(response).await?;
+                        }
+                        _ => {
+                            let msg = format!("{}: {}", username.green().bold(), msg);
+                            state.broadcast(addr, &msg).await;
+                        }
                     }
                 }
-            }
-            Some(Err(e)) => {
-                tracing::error!(
-                    "an error occurred while processing messages for {}; error = {:?}",
-                    username,
-                    e
-                );
-            }
-            None => break,
-        },
-    }
+                Some(Err(e)) => {
+                    tracing::error!(
+                        "an error occurred while processing messages for {}; error = {:?}",
+                        username,
+                        e
+                    );
+                }
+                None => break,
+            },
+        }
     }
 
     {
