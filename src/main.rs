@@ -1,22 +1,23 @@
-mod commands;
-mod database;
-mod websocket;
-
-use colored::*;
-use futures::SinkExt;
-use prettytable::{row, Table};
-use rusqlite::Connection;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+
+use colored::*;
+use futures::SinkExt;
+use prettytable::{row, Table};
+use rusqlite::Connection;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Framed, LinesCodec};
 use tracing_subscriber::fmt::format::FmtSpan;
+
+mod commands;
+mod database;
+mod websocket;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -126,6 +127,7 @@ impl Peer {
         Ok(Peer { lines, rx })
     }
 }
+
 
 async fn process(
     state: Arc<Mutex<Shared>>,
@@ -259,10 +261,27 @@ async fn process(
                                             peer.lines.send("User not found or not connected.").await?;
                                         }
                                     } else {
-                                        peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
+                                        peer.lines.send("Invalid private message format. Use /whisper <username> <message>").await?;
                                     }
                                 } else {
-                                    peer.lines.send("Invalid private message format. Use /pm <username> <message>").await?;
+                                    peer.lines.send("Invalid private message format. Use /whisper <username> <message>").await?;
+                                }
+                            }
+                        }
+                        "/history" => {
+                            let mut args = msg.split_whitespace().skip(1);
+                            match args.next() {
+                                Some("all") => {
+                                    let messages = database::get_all_messages(&conn).await.unwrap_or_default();
+                                    peer.lines.send(commands::format_message_history("all users", &messages)).await?;
+                                }
+                                Some(username) => {
+                                    let messages = database::get_messages_by_user(&conn, username).await.unwrap_or_default();
+                                    peer.lines.send(commands::format_message_history(username, &messages)).await?;
+                                }
+                                None => {
+                                    let messages = database::get_messages_by_user(&conn, username).await.unwrap_or_default();
+                                    peer.lines.send(commands::format_message_history(username, &messages)).await?;
                                 }
                             }
                         }
@@ -271,6 +290,7 @@ async fn process(
                             let mut table = Table::new();
                             table.add_row(row!["Command", "Description"]);
                             table.add_row(row!["/listusers", "List all users"]);
+                            table.add_row(row!["/history", "Show your message history"]);
                             table.add_row(row!["/whisper <username> <message>", "Send a private message to a user"]);
                             table.add_row(row!["/help", "Show this help message"]);
                             table.print(&mut response).unwrap();
@@ -278,6 +298,9 @@ async fn process(
                             peer.lines.send(response).await?;
                         }
                         _ => {
+                            database::store_message(&conn, username, &msg).await.unwrap_or_else(|e| {
+                                tracing::error!("Failed to store message: {:?}", e);
+                            });
                             let msg = format!("{}: {}", username.green().bold(), msg);
                             state.broadcast(addr, &msg).await;
                         }

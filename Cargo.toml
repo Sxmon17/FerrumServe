@@ -18,6 +18,7 @@ prettytable-rs = "0.10.0"
 bcrypt = "0.14.0"
 tungstenite = "0.18.0"
 tokio-tungstenite = "0.18.0"
+chrono = "0.4.24"
 
 [[bin]]
 name = "ferrum-serve"

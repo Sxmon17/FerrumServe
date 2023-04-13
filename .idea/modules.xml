@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/rum.iml" filepath="$PROJECT_DIR$/rum.iml" />
+      <module fileurl="file://$PROJECT_DIR$/ferrum-serve.iml" filepath="$PROJECT_DIR$/ferrum-serve.iml" />
     </modules>
   </component>
 </project>
