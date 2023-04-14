@@ -90,9 +90,11 @@ pub async fn get_messages_by_user(
     let conn = conn.lock().await;
     let mut stmt = conn.prepare("SELECT message, timestamp FROM messages WHERE username = ?1")?;
     let rows = stmt.query_map([username], |row| {
-        let message: String = row.get(0)?;
-        let timestamp: String = row.get(1)?;
-        Ok(format!("{} {}: {}", timestamp, username, message))
+        Ok(Message::from_database(
+            username.to_string(),
+            row.get(0)?,
+            row.get(1)?,
+        ).format())
     })?;
     let mut messages = Vec::new();
     for message in rows {
