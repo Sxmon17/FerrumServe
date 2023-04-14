@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use crate::Message;
 use bcrypt::{hash, verify, DEFAULT_COST};
-use chrono::Utc;
 use rusqlite::{params, Connection, Result as SqlResult};
 use tokio::sync::Mutex;
 
@@ -62,26 +62,19 @@ pub async fn authenticate_user(
     Ok(is_valid)
 }
 
-pub async fn store_message(
-    conn: &Arc<Mutex<Connection>>,
-    username: &str,
-    message: &str,
-) -> SqlResult<()> {
-    let timestamp = Utc::now().to_string();
+pub async fn store_message(conn: &Arc<Mutex<Connection>>, message: &Message) -> SqlResult<()> {
     conn.lock().await.execute(
         "INSERT INTO messages (username, message, timestamp) VALUES (?1, ?2, ?3)",
-        params![username, message, timestamp],
+        params![message.sender, message.content, message.timestamp],
     )?;
     Ok(())
 }
 
 pub async fn get_all_messages(conn: &Mutex<Connection>) -> Result<Vec<String>, rusqlite::Error> {
     let conn = conn.lock().await;
-    let mut stmt = conn.prepare("SELECT username, message FROM messages")?;
+    let mut stmt = conn.prepare("SELECT username, message, timestamp FROM messages")?;
     let rows = stmt.query_map([], |row| {
-        let username: String = row.get(0)?;
-        let message: String = row.get(1)?;
-        Ok(format!("{}: {}", username, message))
+        Ok(Message::from_database(row.get(0)?, row.get(1)?, row.get(2)?).format())
     })?;
     let mut messages = Vec::new();
     for message in rows {
@@ -95,10 +88,11 @@ pub async fn get_messages_by_user(
     username: &str,
 ) -> Result<Vec<String>, rusqlite::Error> {
     let conn = conn.lock().await;
-    let mut stmt = conn.prepare("SELECT message FROM messages WHERE username = ?1")?;
+    let mut stmt = conn.prepare("SELECT message, timestamp FROM messages WHERE username = ?1")?;
     let rows = stmt.query_map([username], |row| {
         let message: String = row.get(0)?;
-        Ok(format!("{}: {}", username, message))
+        let timestamp: String = row.get(1)?;
+        Ok(format!("{} {}: {}", timestamp, username, message))
     })?;
     let mut messages = Vec::new();
     for message in rows {

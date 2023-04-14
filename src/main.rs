@@ -15,8 +15,11 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{Framed, LinesCodec};
 use tracing_subscriber::fmt::format::FmtSpan;
 
+use crate::message::Message;
+
 mod commands;
 mod database;
+mod message;
 mod websocket;
 
 #[tokio::main]
@@ -128,7 +131,6 @@ impl Peer {
     }
 }
 
-
 async fn process(
     state: Arc<Mutex<Shared>>,
     conn: Arc<Mutex<Connection>>,
@@ -164,6 +166,7 @@ async fn process(
         return Ok(());
     }
 
+    // TODO: refactor this
     let register_or_login = login_parts[0];
     let username = login_parts[1];
     let password = login_parts[2];
@@ -298,11 +301,11 @@ async fn process(
                             peer.lines.send(response).await?;
                         }
                         _ => {
-                            database::store_message(&conn, username, &msg).await.unwrap_or_else(|e| {
+                            let msg = Message::from_input(username.to_string(), msg.to_string());
+                            database::store_message(&conn, &msg).await.unwrap_or_else(|e| {
                                 tracing::error!("Failed to store message: {:?}", e);
                             });
-                            let msg = format!("{}: {}", username.green().bold(), msg);
-                            state.broadcast(addr, &msg).await;
+                            state.broadcast(addr, &msg.format().to_string()).await;
                         }
                     }
                 }
