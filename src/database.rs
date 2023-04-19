@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::sync::Arc;
 
 use crate::Message;
@@ -90,15 +91,26 @@ pub async fn get_messages_by_user(
     let conn = conn.lock().await;
     let mut stmt = conn.prepare("SELECT message, timestamp FROM messages WHERE username = ?1")?;
     let rows = stmt.query_map([username], |row| {
-        Ok(Message::from_database(
-            username.to_string(),
-            row.get(0)?,
-            row.get(1)?,
-        ).format())
+        Ok(Message::from_database(username.to_string(), row.get(0)?, row.get(1)?).format())
     })?;
     let mut messages = Vec::new();
     for message in rows {
         messages.push(message?);
     }
     Ok(messages)
+}
+
+pub async fn update_user_password(
+    conn: &Mutex<Connection>,
+    username: &str,
+    new_password: &str,
+) -> Result<(), Box<dyn Error>> {
+    let conn = conn.lock().await;
+    let hashed_password = hash(new_password, DEFAULT_COST).unwrap();
+    conn.execute(
+        "UPDATE users SET password = ?1 WHERE username = ?2",
+        params![hashed_password, username],
+    )?;
+
+    Ok(())
 }

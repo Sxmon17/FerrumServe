@@ -131,6 +131,7 @@ impl Peer {
     }
 }
 
+//TODO: Admin account
 async fn process(
     state: Arc<Mutex<Shared>>,
     conn: Arc<Mutex<Connection>>,
@@ -166,7 +167,6 @@ async fn process(
         return Ok(());
     }
 
-    // TODO: refactor this
     let register_or_login = login_parts[0];
     let username = login_parts[1];
     let password = login_parts[2];
@@ -219,6 +219,7 @@ async fn process(
             .await;
     }
 
+    //TODO: /color command
     loop {
         tokio::select! {
             Some(msg) = peer.rx.recv() => {
@@ -288,13 +289,33 @@ async fn process(
                                 }
                             }
                         }
+                        "/changepw" => {
+                            let mut parts = msg.splitn(3, ' ');
+                            if let Some(_cmd) = parts.next() {
+                                if let Some(old_password) = parts.next() {
+                                    if let Some(new_password) = parts.next() {
+                                        if database::authenticate_user(&conn, username, old_password).await? {
+                                            database::update_user_password(&conn, username, new_password).await?;
+                                            peer.lines.send("Password updated successfully.".green().to_string()).await?;
+                                        } else {
+                                            peer.lines.send("Incorrect password. Please try again.".red().to_string()).await?;
+                                        }
+                                    } else {
+                                        peer.lines.send("Invalid command format. Use /changepassword <old_password> <new_password>").await?;
+                                    }
+                                } else {
+                                    peer.lines.send("Invalid command format. Use /changepassword <old_password> <new_password>").await?;
+                                }
+                            }
+                        }
                         "/help" => {
                             let mut response = Vec::new();
                             let mut table = Table::new();
                             table.add_row(row!["Command", "Description"]);
                             table.add_row(row!["/listusers", "List all users"]);
-                            table.add_row(row!["/history", "Show your message history"]);
+                            table.add_row(row!["/history [blank, username, all]", "Show msg history"]);
                             table.add_row(row!["/whisper <username> <message>", "Send a private message to a user"]);
+                            table.add_row(row!["/changepw <old_password> <new_password>", "Change your password"]);
                             table.add_row(row!["/help", "Show this help message"]);
                             table.print(&mut response).unwrap();
                             let response = String::from_utf8(response).unwrap();
