@@ -8,14 +8,6 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new(sender: String, content: String) -> Self {
-        Message {
-            sender,
-            content,
-            timestamp: Utc::now().format("%H:%M:%S").to_string(),
-        }
-    }
-
     pub fn from_database(sender: String, content: String, timestamp: String) -> Self {
         Message {
             sender,
