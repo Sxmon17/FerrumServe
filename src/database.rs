@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::Message;
 use bcrypt::{hash, verify, DEFAULT_COST};
+use colored::Color;
 use rusqlite::{params, Connection, Result as SqlResult};
 use tokio::sync::Mutex;
 
@@ -75,7 +76,7 @@ pub async fn get_all_messages(conn: &Mutex<Connection>) -> Result<Vec<String>, r
     let conn = conn.lock().await;
     let mut stmt = conn.prepare("SELECT username, message, timestamp FROM messages")?;
     let rows = stmt.query_map([], |row| {
-        Ok(Message::from_database(row.get(0)?, row.get(1)?, row.get(2)?).format())
+        Ok(Message::from_database(row.get(0)?, row.get(1)?, row.get(2)?).format(Color::Blue))
     })?;
     let mut messages = Vec::new();
     for message in rows {
@@ -91,7 +92,10 @@ pub async fn get_messages_by_user(
     let conn = conn.lock().await;
     let mut stmt = conn.prepare("SELECT message, timestamp FROM messages WHERE username = ?1")?;
     let rows = stmt.query_map([username], |row| {
-        Ok(Message::from_database(username.to_string(), row.get(0)?, row.get(1)?).format())
+        Ok(
+            Message::from_database(username.to_string(), row.get(0)?, row.get(1)?)
+                .format(Color::Blue),
+        )
     })?;
     let mut messages = Vec::new();
     for message in rows {

@@ -1,5 +1,5 @@
 use chrono::Utc;
-use colored::Colorize;
+use colored::{Color, Colorize};
 
 pub struct Message {
     pub sender: String,
@@ -24,11 +24,11 @@ impl Message {
         }
     }
 
-    pub fn format(&self) -> String {
+    pub fn format(&self, color: Color) -> String {
         format!(
             "{} {}: {}",
             self.timestamp.bright_black(),
-            self.sender.bright_blue(),
+            self.sender.color(color),
             self.content
         )
     }

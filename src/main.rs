@@ -9,6 +9,7 @@ use colored::*;
 use futures::SinkExt;
 use prettytable::{row, Table};
 use rusqlite::Connection;
+use std::str::FromStr;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::StreamExt;
@@ -83,6 +84,7 @@ struct Shared {
 struct Peer {
     lines: Framed<TcpStream, LinesCodec>,
     rx: Rx,
+    color: Color,
 }
 
 impl Shared {
@@ -127,7 +129,11 @@ impl Peer {
         let (tx, rx) = mpsc::unbounded_channel();
         state.lock().await.peers.insert(addr, tx);
         state.lock().await.usernames.insert(addr, username.clone());
-        Ok(Peer { lines, rx })
+        Ok(Peer {
+            lines,
+            rx,
+            color: Color::Green,
+        })
     }
 }
 
@@ -308,6 +314,22 @@ async fn process(
                                 }
                             }
                         }
+                        "/color" => {
+                            let mut parts = msg.split_whitespace().skip(1);
+                            if let Some(color_name) = parts.next() {
+                                match Color::from_str(color_name) {
+                                    Ok(color) => {
+                                        peer.color = color;
+                                        peer.lines.send(format!("Text color changed to {}.", color_name.green())).await?;
+                                    }
+                                    Err(_) => {
+                                        peer.lines.send("Invalid color. Please provide a valid color name.".red().to_string()).await?;
+                                    }
+                                }
+                            } else {
+                                peer.lines.send("Invalid command format. Use /color <color_name>").await?;
+                            }
+                        }
                         "/help" => {
                             let mut response = Vec::new();
                             let mut table = Table::new();
@@ -316,6 +338,7 @@ async fn process(
                             table.add_row(row!["/history [blank, username, all]", "Show msg history"]);
                             table.add_row(row!["/whisper <username> <message>", "Send a private message to a user"]);
                             table.add_row(row!["/changepw <old_password> <new_password>", "Change your password"]);
+                            table.add_row(row!["/color <color_name>", "Change your username color"]);
                             table.add_row(row!["/help", "Show this help message"]);
                             table.print(&mut response).unwrap();
                             let response = String::from_utf8(response).unwrap();
@@ -326,7 +349,8 @@ async fn process(
                             database::store_message(&conn, &msg).await.unwrap_or_else(|e| {
                                 tracing::error!("Failed to store message: {:?}", e);
                             });
-                            state.broadcast(addr, &msg.format().to_string()).await;
+                            let formatted_msg = msg.format(peer.color);
+                            state.broadcast(addr, &formatted_msg).await;
                         }
                     }
                 }
