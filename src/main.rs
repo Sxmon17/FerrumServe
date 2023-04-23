@@ -8,7 +8,7 @@ use std::sync::Arc;
 use colored::*;
 use futures::SinkExt;
 use prettytable::{row, Table};
-use rusqlite::{Connection, ToSql};
+use rusqlite::{Connection};
 use std::str::FromStr;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
@@ -200,6 +200,18 @@ async fn process(
                 .await?;
             return Ok(());
         }
+        if state.lock().await.is_user_connected(username) {
+            lines
+                .send("User already connected, please try again.")
+                .await?;
+            return Ok(());
+        }
+        if database::get_user_role(&conn, username).await? == "banned" {
+            lines
+                .send("You are banned, please try again later.")
+                .await?;
+            return Ok(());
+        }
     } else {
         lines
             .send("Invalid command, use 'register' or 'login' followed by username and password.")
@@ -346,6 +358,39 @@ async fn process(
                                 peer.lines.send("Invalid command format. Use /admin <password>").await?;
                             }
                         }
+                        "/ban" => {
+                            if database::get_user_role(&conn, username).await? == "admin" {
+                                let mut parts = msg.split_whitespace().skip(1);
+                                if let Some(username) = parts.next() {
+                                    database::change_role(&conn, username, "banned").await?;
+                                    if let Some(addr) = state.get_addr_by_username(username).await {
+                                        if let Ok(addr) = addr.parse::<SocketAddr>() {
+                                            if let Some(tx) = state.peers.get(&addr) {
+                                                tx.send("You have been banned.".red().to_string()).unwrap();
+                                            }
+                                        }
+                                    }
+                                    peer.lines.send(format!("{} has been banned.", username.green())).await?;
+                                } else {
+                                    peer.lines.send("Invalid command format. Use /ban <username>").await?;
+                                }
+                            } else {
+                                peer.lines.send("You are not an admin.".red().to_string()).await?;
+                            }
+                        }
+                        "/unban" => {
+                            if database::get_user_role(&conn, username).await? == "admin" {
+                                let mut parts = msg.split_whitespace().skip(1);
+                                if let Some(username) = parts.next() {
+                                    database::change_role(&conn, username, "user").await?;
+                                    peer.lines.send(format!("{} has been unbanned.", username.green())).await?;
+                                } else {
+                                    peer.lines.send("Invalid command format. Use /unban <username>").await?;
+                                }
+                            } else {
+                                peer.lines.send("You are not an admin.".red().to_string()).await?;
+                            }
+                        }
                         "/help" => {
                             let mut response = Vec::new();
                             let mut table = Table::new();
@@ -355,18 +400,27 @@ async fn process(
                             table.add_row(row!["/whisper <username> <message>", "Send a private message to a user"]);
                             table.add_row(row!["/changepw <old_password> <new_password>", "Change your password"]);
                             table.add_row(row!["/color <color_name>", "Change your username color"]);
+                            table.add_row(row!["/admin <password>", "Become an admin"]);
+                            table.add_row(row!["/ban <username>", "Ban a user"]);
+                            table.add_row(row!["/unban <username>", "Unban a user"]);
+                            table.add_row(row!["/mute <username>", "Mute a user"]);
+                            table.add_row(row!["/unmute <username>", "Unmute a user"]);
                             table.add_row(row!["/help", "Show this help message"]);
                             table.print(&mut response).unwrap();
                             let response = String::from_utf8(response).unwrap();
                             peer.lines.send(response).await?;
                         }
                         _ => {
-                            let msg = Message::from_input(username.to_string(), msg.to_string());
-                            database::store_message(&conn, &msg).await.unwrap_or_else(|e| {
-                                tracing::error!("Failed to store message: {:?}", e);
-                            });
-                            let formatted_msg = msg.format(peer.color);
-                            state.broadcast(addr, &formatted_msg).await;
+                            if database::get_user_role(&conn, username).await? == "muted" {
+                                peer.lines.send("You are muted.".red().to_string()).await?;
+                            } else {
+                                let msg = Message::from_input(username.to_string(), msg.to_string());
+                                database::store_message(&conn, &msg).await.unwrap_or_else(|e| {
+                                    tracing::error!("Failed to store message: {:?}", e);
+                                });
+                                let formatted_msg = msg.format(peer.color);
+                                state.broadcast(addr, &formatted_msg).await;
+                            }
                         }
                     }
                 }

@@ -1,3 +1,4 @@
+
 use std::error::Error;
 use std::sync::Arc;
 
@@ -128,4 +129,11 @@ pub async fn change_role(conn: &Mutex<Connection>, username: &str, role: &str) -
     )?;
 
     Ok(())
+}
+
+pub async fn get_user_role(conn: &Mutex<Connection>, username: &str) -> Result<String, rusqlite::Error> {
+    let conn = conn.lock().await;
+    let mut stmt = conn.prepare("SELECT role FROM users WHERE username = ?1")?;
+    let role: String = stmt.query_row(params![username], |row| row.get(0))?;
+    Ok(role)
 }
