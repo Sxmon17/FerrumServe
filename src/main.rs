@@ -391,6 +391,32 @@ async fn process(
                                 peer.lines.send("You are not an admin.".red().to_string()).await?;
                             }
                         }
+                        "/mute" => {
+                            if database::get_user_role(&conn, username).await? == "admin" {
+                                let mut parts = msg.split_whitespace().skip(1);
+                                if let Some(username) = parts.next() {
+                                    database::change_role(&conn, username, "muted").await?;
+                                    peer.lines.send(format!("{} has been muted.", username.green())).await?;
+                                } else {
+                                    peer.lines.send("Invalid command format. Use /mute <username>").await?;
+                                }
+                            } else {
+                                peer.lines.send("You are not an admin.".red().to_string()).await?;
+                            }
+                        }
+                        "/unmute" => {
+                            if database::get_user_role(&conn, username).await? == "admin" {
+                                let mut parts = msg.split_whitespace().skip(1);
+                                if let Some(username) = parts.next() {
+                                    database::change_role(&conn, username, "user").await?;
+                                    peer.lines.send(format!("{} has been unmuted.", username.green())).await?;
+                                } else {
+                                    peer.lines.send("Invalid command format. Use /unmute <username>").await?;
+                                }
+                            } else {
+                                peer.lines.send("You are not an admin.".red().to_string()).await?;
+                            }
+                        }
                         "/help" => {
                             let mut response = Vec::new();
                             let mut table = Table::new();
