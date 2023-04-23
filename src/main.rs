@@ -8,7 +8,7 @@ use std::sync::Arc;
 use colored::*;
 use futures::SinkExt;
 use prettytable::{row, Table};
-use rusqlite::Connection;
+use rusqlite::{Connection, ToSql};
 use std::str::FromStr;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
@@ -137,7 +137,6 @@ impl Peer {
     }
 }
 
-//TODO: Admin account
 async fn process(
     state: Arc<Mutex<Shared>>,
     conn: Arc<Mutex<Connection>>,
@@ -225,7 +224,6 @@ async fn process(
             .await;
     }
 
-    //TODO: /color command
     loop {
         tokio::select! {
             Some(msg) = peer.rx.recv() => {
@@ -328,6 +326,24 @@ async fn process(
                                 }
                             } else {
                                 peer.lines.send("Invalid command format. Use /color <color_name>").await?;
+                            }
+                        }
+                        "/admin" => {
+                            let mut password = msg.split_whitespace().skip(1);
+
+                            let admin_pw = env::args()
+                                .nth(2)
+                                .unwrap_or_else(|| "admin".to_string());
+
+                            if let Some(password) = password.next() {
+                                if password == admin_pw {
+                                    database::change_role(&conn, username, "admin").await?;
+                                    peer.lines.send("You are now an admin.".green().to_string()).await?;
+                                } else {
+                                    peer.lines.send("Incorrect password. Please try again.".red().to_string()).await?;
+                                }
+                            } else {
+                                peer.lines.send("Invalid command format. Use /admin <password>").await?;
                             }
                         }
                         "/help" => {

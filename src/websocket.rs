@@ -1,10 +1,10 @@
 use futures::SinkExt;
+use futures::StreamExt;
+use futures::TryStreamExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tungstenite::Message;
-use futures::TryStreamExt;
-use futures::StreamExt;
 use tokio_tungstenite::accept_async;
+use tungstenite::Message;
 
 pub async fn websocket_proxy() {
     let ws_listener = TcpListener::bind("127.0.0.1:8081").await.unwrap();
@@ -37,7 +37,10 @@ pub async fn websocket_proxy() {
                 }
 
                 let text = String::from_utf8_lossy(&buf[..n]);
-                ws_sender.send(Message::Text(text.into_owned())).await.unwrap();
+                ws_sender
+                    .send(Message::Text(text.into_owned()))
+                    .await
+                    .unwrap();
             }
         });
     }

@@ -13,7 +13,8 @@ pub fn init_user_database() -> SqlResult<Connection> {
         "CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user'
         )",
         [],
     )?;
@@ -114,6 +115,16 @@ pub async fn update_user_password(
     conn.execute(
         "UPDATE users SET password = ?1 WHERE username = ?2",
         params![hashed_password, username],
+    )?;
+
+    Ok(())
+}
+
+pub async fn change_role(conn: &Mutex<Connection>, username: &str, role: &str) -> SqlResult<()> {
+    let conn = conn.lock().await;
+    conn.execute(
+        "UPDATE users SET role = ?1 WHERE username = ?2",
+        params![role, username],
     )?;
 
     Ok(())
