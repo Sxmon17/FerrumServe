@@ -240,6 +240,9 @@ async fn process(
         tokio::select! {
             Some(msg) = peer.rx.recv() => {
                 peer.lines.send(&msg).await?;
+                if msg == "You have been banned.".red().to_string() {
+                    break;
+                }
             }
             result = peer.lines.next() => match result {
                 Some(Ok(msg)) => {
