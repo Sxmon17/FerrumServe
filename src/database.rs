@@ -74,6 +74,17 @@ pub async fn store_message(conn: &Arc<Mutex<Connection>>, message: &Message) -> 
     Ok(())
 }
 
+pub async fn get_all_users(conn: &Mutex<Connection>) -> Result<Vec<String>, rusqlite::Error> {
+    let conn = conn.lock().await;
+    let mut stmt = conn.prepare("SELECT username FROM users")?;
+    let rows = stmt.query_map([], |row| row.get(0))?;
+    let mut users = Vec::new();
+    for user in rows {
+        users.push(user?);
+    }
+    Ok(users)
+}
+
 pub async fn get_all_messages(conn: &Mutex<Connection>) -> Result<Vec<String>, rusqlite::Error> {
     let conn = conn.lock().await;
     let mut stmt = conn.prepare("SELECT username, message, timestamp FROM messages")?;

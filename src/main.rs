@@ -249,16 +249,16 @@ async fn process(
                     let mut state = state.lock().await;
                     match msg.trim().split(' ').collect::<Vec<&str>>()[0] {
                         "/listusers" => {
-                            let db_conn = conn.lock().await;
-                            let users = commands::get_all_users(&db_conn).unwrap_or_default();
+                            let users = database::get_all_users(&conn).await.unwrap_or_default();
 
                             let mut table = Table::new();
-                            table.add_row(row!["Username", "Status"]);
+                            table.add_row(row!["Username", "Status", "Role"]);
 
                             for user in users {
                                 let is_connected = state.is_user_connected(&user);
                                 let status = if is_connected { "Online".green() } else { "Offline".red() };
-                                table.add_row(row![user, status]);
+                                let role = database::get_user_role(&conn, &user).await.unwrap_or_default();
+                                table.add_row(row![user, status, role]);
                             }
 
                             let mut response = Vec::new();
