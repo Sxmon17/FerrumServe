@@ -14,6 +14,21 @@ A simple, asynchronous TCP-based chat server built using Rust, Tokio, and SQLite
 - [x] Logging with log and env_logger 📝
 - [x] Admin account with special privileges and commands 🛡️
 
+## Commands 📜
+- `/help` - List all available commands
+- `/listusers` - List all users with their online/offline status and their role
+- `/history [blank, username, all]` - Show msg history
+- `/whisper <username> <message>` - Send a private message to a user
+- `/changepw <old_password> <new_password>` - Change your password
+- `/color <color_name>` - Change your username color
+- `/admin <password>` - Become an admin
+- `/ban <username>` - Ban a user
+- `/unban <username>` - Unban a user
+- `/mute <username>` - Mute a user
+- `/unmute <username>` - Unmute a user
+- `/quit` - Quit the chat
+
+
 ## Prerequisites 📚
 
 - Rust (stable) and Cargo 🦀
@@ -27,7 +42,7 @@ A simple, asynchronous TCP-based chat server built using Rust, Tokio, and SQLite
 To start the server download FerrumServe from the release page
 
 ``` bash
-$ ~/ferrum-serve 127.0.0.1:6142
+$ ~/ferrum-serve 127.0.0.1:6142 admin1234
 ```
 
 ### Connecting to the server 📡
@@ -42,8 +57,8 @@ $ telnet 127.0.0.1:6142
 #### Clone the repository
 
 ``` bash
-$ git clone https://github.com/yourusername/rust-tcp-chat-server.git
-$ cd rust-tcp-chat-server
+$ git clone https://github.com/FerrumLink/FerrumServe
+$ cd FerrumServe
 ```
 
 #### Build the project
